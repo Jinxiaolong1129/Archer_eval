@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Test data
+data/test/
+
+# Output directories
+output/
+outputs/2026-01-16/
+tools/outputs/
+
+# Log files
+*.log
+

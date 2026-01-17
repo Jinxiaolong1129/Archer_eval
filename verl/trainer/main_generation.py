@@ -12,6 +12,7 @@ import ray
 import numpy as np
 import hydra
 import os
+import time
 import wandb
 from tabulate import tabulate
 
@@ -144,9 +145,14 @@ def main_task(config):
         num_batch = (total_samples // config_batch_size) + 1
         output_lst = []  # We'll reshape at the end
 
-        for batch_idx in range(num_batch):
-            print(f'[{batch_idx+1}/{num_batch}] Start to process.')
+        # Progress bar for batch processing
+        start_time = time.time()
+        batch_pbar = tqdm(range(num_batch), desc="Processing batches", unit="batch")
+        for batch_idx in batch_pbar:
             batch_chat_lst = chat_lst[batch_idx * config_batch_size:(batch_idx + 1) * config_batch_size]
+            if len(batch_chat_lst) == 0:
+                continue
+            batch_pbar.set_postfix({"samples": f"{batch_idx * config_batch_size}/{total_samples}"})
 
             # Repeat the batch n_samples times
             repeated_chat_lst = []
@@ -182,10 +188,9 @@ def main_task(config):
             batch_size = data.batch['input_ids'].shape[0]
             assert batch_size % dp_size == 0, f'batch_size {batch_size} is not divisible by dp_size {dp_size}'
 
-            print(f'[{batch_idx+1}/{num_batch}] Start to generate.')
+            batch_pbar.set_description(f"Generating batch {batch_idx+1}/{num_batch}")
 
             # Generate all samples at once
-            print(len(data.batch['input_ids']))
             output = wg.generate_sequences(data)
             # Remove dummy data
             output = output[:real_batch_size]
@@ -198,6 +203,11 @@ def main_task(config):
                 output_text_unpad.append(text.replace(pad_token, ''))
 
             output_lst.extend(output_text_unpad)
+            batch_pbar.set_postfix({"generated": len(output_lst), "total": total_samples * config.data.n_samples})
+
+        batch_pbar.close()
+        elapsed_time = time.time() - start_time
+        print(f"\n✓ Generation complete! Total {len(output_lst)} responses generated in {elapsed_time:.1f}s")
 
         # Reshape output_lst from (total_samples,) to (n_data, n_samples)
         total_samples = len(output_lst)
